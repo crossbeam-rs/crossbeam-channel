@@ -325,6 +325,7 @@ extern crate crossbeam_epoch;
 extern crate crossbeam_utils;
 extern crate parking_lot;
 
+mod broadcast;
 mod channel;
 mod err;
 mod exchanger;
@@ -333,6 +334,7 @@ mod monitor;
 mod select;
 mod utils;
 
+pub use broadcast::Broadcast;
 pub use channel::{bounded, unbounded};
 pub use channel::{Receiver, Sender};
 pub use channel::{IntoIter, Iter, TryIter};
