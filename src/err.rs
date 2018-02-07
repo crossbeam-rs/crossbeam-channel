@@ -1,5 +1,6 @@
 use std::error;
 use std::fmt;
+use std::sync::mpsc;
 
 /// An error returned from the [`Sender::send`] method.
 ///
@@ -180,6 +181,24 @@ impl<T> From<SendError<T>> for TrySendError<T> {
     }
 }
 
+impl<T> From<mpsc::TrySendError<T>> for TrySendError<T> {
+    fn from(err: mpsc::TrySendError<T>) -> TrySendError<T> {
+        match err {
+            mpsc::TrySendError::Full(t) => TrySendError::Full(t),
+            mpsc::TrySendError::Disconnected(t) => TrySendError::Disconnected(t),
+        }
+    }
+}
+
+impl<T> Into<mpsc::TrySendError<T>> for TrySendError<T> {
+    fn into(self) -> mpsc::TrySendError<T> {
+        match self {
+            TrySendError::Full(t) => mpsc::TrySendError::Full(t),
+            TrySendError::Disconnected(t) => mpsc::TrySendError::Disconnected(t),
+        }
+    }
+}
+
 impl<T> TrySendError<T> {
     /// Unwraps the value.
     ///
@@ -347,6 +366,24 @@ impl From<RecvError> for TryRecvError {
     fn from(err: RecvError) -> TryRecvError {
         match err {
             RecvError => TryRecvError::Closed,
+        }
+    }
+}
+
+impl From<mpsc::TryRecvError> for TryRecvError {
+    fn from(err: mpsc::TryRecvError) -> TryRecvError {
+        match err {
+            mpsc::TryRecvError::Empty => TryRecvError::Empty,
+            mpsc::TryRecvError::Disconnected => TryRecvError::Disconnected,
+        }
+    }
+}
+
+impl Into<mpsc::TryRecvError> for TryRecvError {
+    fn into(self) -> mpsc::TryRecvError {
+        match self {
+            TryRecvError::Empty => mpsc::TryRecvError::Empty,
+            TryRecvError::Disconnected => mpsc::TryRecvError::Disconnected,
         }
     }
 }
