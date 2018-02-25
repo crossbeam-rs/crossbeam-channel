@@ -158,7 +158,7 @@ impl<T> Channel<T> {
 
     /// Attempts to push `msg` into the channel.
     ///
-    /// Returns `None` on success, and `Some(msg)` if the channel is full.
+    /// Returns `Ok` on success, and `PushError(msg)` if the channel is full or disconnected.
     fn push(&self, msg: T, backoff: &mut Backoff) -> Result<(), PushError<T>> {
         let one_lap = self.mark_bit << 1;
         let index_bits = self.mark_bit - 1;
