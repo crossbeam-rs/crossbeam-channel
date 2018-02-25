@@ -4,20 +4,53 @@ use std::sync::atomic::Ordering::{Acquire, Release};
 
 use futures_rs::task::{self, Task};
 
-/// A synchronization mechanism between senders and notifiers.
+/// A synchronization mechanism for coordinating notifications between senders and receivers.
 ///
-/// Based on `futures::AtomicTask`.
+/// `SenderTask` is based heavily on `futures::AtomicTask`, but it is simpler and exposes more
+/// state through its API. `SenderTask::register()` and `SenderTask::notify()` are used exactly
+/// like the equivalents on `futures::AtomicTask` except for a few differences:
+///
+/// * `SenderTask` is a 'one-shot' notifier: once it's been notified, it can't be reset to a
+/// non-notified state.
+/// * `register()` and `notify()` return a `Result` which can be used by the caller to determine if
+/// the `SenderTask` has already been notified.
+/// * `register()` must only be called by a single thread/task (the `Sender`).
+///
+/// Because `SenderTask` does not support reseting back to a non-notified state, the state
+/// transition diagram is simpler than `futures::AtomicTask`'s:
+///
+/// ```norun
+///    ┌──────────┐                   ┌────────────┐
+///    │          │                   │            │
+///    │  Parked  │─────notify()─────▶│  Notified  │
+///    │          │                   │            │
+///    └──────────┘                   └────────────┘
+///         ▲                                │
+///         │                                │
+///         │                                │
+///     register()                       register()
+///         │                                │
+///         │                                │
+///         ▼                                ▼
+///   ┌──────────┐                 ┌──────────────────┐
+///   │          │                 │                  │
+///   │  Locked  │──────notify()──▶│  LockedNotified  │
+///   │          │                 │                  │
+///   └──────────┘                 └──────────────────┘
+/// ```
 pub struct SenderTask {
     state: AtomicUsize,
     task: UnsafeCell<Task>,
 }
 
-/// Initial state.
 const NOTIFIED_BIT: usize = 1;
 const LOCKED_BIT: usize = 1 << 1;
 
+/// Initial state.
 const PARKED: usize = 0;
+/// Locked state, active only during a call to register().
 const LOCKED: usize = LOCKED_BIT;
+/// Notified state
 const NOTIFIED: usize = NOTIFIED_BIT;
 const LOCKED_NOTIFIED: usize = LOCKED_BIT | NOTIFIED_BIT;
 
@@ -45,16 +78,20 @@ impl SenderTask {
                 // Lock acquired, update the task cell.
                 *self.task.get() = task;
 
-                // Release the lock. If the state transitioned to
-                // `NOTIFIED`, this means that a notify has been
-                // signaled, so return an error.
-                if self.state.fetch_and(!LOCKED_BIT, Release) & NOTIFIED_BIT > 0 {
+                // Release the lock. If the state transitioned to `LOCKED_NOTIFIED`, this means
+                // that notify() has been concurrently called, so return an error.
+                if self.state.fetch_and(!LOCKED_BIT, Release) == LOCKED_NOTIFIED {
                     Err(())
                 } else {
                     Ok(())
                 }
             },
-            _ => Err(())
+            NOTIFIED => Err(()),
+            // LOCKED/LOCKED_NOTIFIED would indicate concurrent register() calls, which is
+            // not supported by this API.
+            LOCKED => unreachable!("SenderTask::register(): unexpected state: LOCKED"),
+            LOCKED_NOTIFIED => unreachable!("SenderTask::register(): unexpected state: LOCKED_NOTIFIED"),
+            other => unreachable!("SenderTask::register(): unexpected state: {}", other),
         }
     }
 
