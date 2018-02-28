@@ -122,6 +122,18 @@ impl<T: Send> error::Error for SendError<T> {
     }
 }
 
+impl<T> From<mpsc::SendError<T>> for SendError<T> {
+    fn from(err: mpsc::SendError<T>) -> SendError<T> {
+        SendError(err.0)
+    }
+}
+
+impl<T> Into<mpsc::SendError<T>> for SendError<T> {
+    fn into(self) -> mpsc::SendError<T> {
+        mpsc::SendError(self.0)
+    }
+}
+
 impl<T> SendError<T> {
     /// Unwraps the value.
     ///
@@ -340,6 +352,18 @@ impl error::Error for RecvError {
     }
 }
 
+impl From<mpsc::RecvError> for RecvError {
+    fn from(_err: mpsc::RecvError) -> RecvError {
+        RecvError
+    }
+}
+
+impl Into<mpsc::RecvError> for RecvError {
+    fn into(self) -> mpsc::RecvError {
+        mpsc::RecvError
+    }
+}
+
 impl fmt::Display for TryRecvError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -414,6 +438,24 @@ impl From<RecvError> for RecvTimeoutError {
     fn from(err: RecvError) -> RecvTimeoutError {
         match err {
             RecvError => RecvTimeoutError::Closed,
+        }
+    }
+}
+
+impl From<mpsc::RecvTimeoutError> for RecvTimeoutError {
+    fn from(err: mpsc::RecvTimeoutError) -> RecvTimeoutError {
+        match err {
+            mpsc::RecvTimeoutError::Timeout => RecvTimeoutError::Timeout,
+            mpsc::RecvTimeoutError::Disconnected => RecvTimeoutError::Disconnected,
+        }
+    }
+}
+
+impl Into<mpsc::RecvTimeoutError> for RecvTimeoutError {
+    fn into(self) -> mpsc::RecvTimeoutError {
+        match self {
+            RecvTimeoutError::Timeout => mpsc::RecvTimeoutError::Timeout,
+            RecvTimeoutError::Disconnected => mpsc::RecvTimeoutError::Disconnected,
         }
     }
 }
