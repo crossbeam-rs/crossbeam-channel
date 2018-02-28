@@ -197,7 +197,7 @@ impl<T> From<mpsc::TrySendError<T>> for TrySendError<T> {
     fn from(err: mpsc::TrySendError<T>) -> TrySendError<T> {
         match err {
             mpsc::TrySendError::Full(t) => TrySendError::Full(t),
-            mpsc::TrySendError::Disconnected(t) => TrySendError::Disconnected(t),
+            mpsc::TrySendError::Disconnected(t) => TrySendError::Closed(t),
         }
     }
 }
@@ -206,7 +206,7 @@ impl<T> Into<mpsc::TrySendError<T>> for TrySendError<T> {
     fn into(self) -> mpsc::TrySendError<T> {
         match self {
             TrySendError::Full(t) => mpsc::TrySendError::Full(t),
-            TrySendError::Disconnected(t) => mpsc::TrySendError::Disconnected(t),
+            TrySendError::Closed(t) => mpsc::TrySendError::Disconnected(t),
         }
     }
 }
@@ -398,7 +398,7 @@ impl From<mpsc::TryRecvError> for TryRecvError {
     fn from(err: mpsc::TryRecvError) -> TryRecvError {
         match err {
             mpsc::TryRecvError::Empty => TryRecvError::Empty,
-            mpsc::TryRecvError::Disconnected => TryRecvError::Disconnected,
+            mpsc::TryRecvError::Disconnected => TryRecvError::Closed,
         }
     }
 }
@@ -407,7 +407,7 @@ impl Into<mpsc::TryRecvError> for TryRecvError {
     fn into(self) -> mpsc::TryRecvError {
         match self {
             TryRecvError::Empty => mpsc::TryRecvError::Empty,
-            TryRecvError::Disconnected => mpsc::TryRecvError::Disconnected,
+            TryRecvError::Closed => mpsc::TryRecvError::Disconnected,
         }
     }
 }
@@ -446,7 +446,7 @@ impl From<mpsc::RecvTimeoutError> for RecvTimeoutError {
     fn from(err: mpsc::RecvTimeoutError) -> RecvTimeoutError {
         match err {
             mpsc::RecvTimeoutError::Timeout => RecvTimeoutError::Timeout,
-            mpsc::RecvTimeoutError::Disconnected => RecvTimeoutError::Disconnected,
+            mpsc::RecvTimeoutError::Disconnected => RecvTimeoutError::Closed,
         }
     }
 }
@@ -455,7 +455,7 @@ impl Into<mpsc::RecvTimeoutError> for RecvTimeoutError {
     fn into(self) -> mpsc::RecvTimeoutError {
         match self {
             RecvTimeoutError::Timeout => mpsc::RecvTimeoutError::Timeout,
-            RecvTimeoutError::Disconnected => mpsc::RecvTimeoutError::Disconnected,
+            RecvTimeoutError::Closed => mpsc::RecvTimeoutError::Disconnected,
         }
     }
 }
