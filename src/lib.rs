@@ -325,6 +325,9 @@ extern crate crossbeam_epoch;
 extern crate crossbeam_utils;
 extern crate parking_lot;
 
+//#[cfg(feature="futures")]
+extern crate futures as futures_rs;
+
 mod channel;
 mod err;
 mod exchanger;
@@ -340,3 +343,6 @@ pub use err::{RecvError, RecvTimeoutError, TryRecvError};
 pub use err::{SendError, SendTimeoutError, TrySendError};
 pub use err::{SelectRecvError, SelectSendError};
 pub use select::Select;
+
+//#[cfg(feature="futures")]
+pub mod futures;
