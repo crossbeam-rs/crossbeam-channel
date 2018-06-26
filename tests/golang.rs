@@ -10,6 +10,7 @@ mod wrappers;
 macro_rules! tests {
     ($channel:path) => {
         use std::any::Any;
+        use std::collections::HashMap;
         use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
         use std::thread;
         use std::time::Duration;
@@ -24,7 +25,92 @@ macro_rules! tests {
 
         // https://github.com/golang/go/blob/master/test/chan/doubleselect.go
         mod doubleselect {
-            // TODO
+            use super::*;
+
+            const ITERATIONS: usize = 100_000;
+
+            #[test]
+            #[ignore]
+            fn test_double_select() {
+                let (c1, r1) = channel::unbounded();
+                let (c2, r2) = channel::unbounded();
+                let (c3, r3) = channel::unbounded();
+                let (c4, r4) = channel::unbounded();
+                let (done_s, done_r) = channel::unbounded();
+                let (mux_s, mux_r) = channel::unbounded();
+
+                fn mux(out: channel::Sender<usize>, in_c: channel::Receiver<usize>, done: channel::Sender<bool>) {
+                    for val in in_c.0 {
+                        out.send(val);
+                    }
+
+                    done.send(true);
+                }
+
+                crossbeam::scope(|scope| {
+                    // This is akin to the sender function in the go example.
+                    scope.spawn(|| {
+                        for i in 0..ITERATIONS {
+                            select! {
+                                send(c1, i) => {},
+                                send(c2, i) => {},
+                                send(c3, i) => {},
+                                send(c4, i) => {},
+                            }
+                        }
+
+                        drop(c1);
+                        drop(c2);
+                        drop(c3);
+                        drop(c4);
+                    });
+
+                    // This is akin to the mux function call.
+                    scope.spawn(|| {
+                        let mux_s = mux_s.clone();
+                        let done_s = done_s.clone();
+                        mux(mux_s, r1, done_s);
+                    });
+                    scope.spawn(|| {
+                        let mux_s = mux_s.clone();
+                        let done_s = done_s.clone();
+                        mux(mux_s, r2, done_s);
+                    });
+                    scope.spawn(|| {
+                        let mux_s = mux_s.clone();
+                        let done_s = done_s.clone();
+                        mux(mux_s, r3, done_s);
+                    });
+                    scope.spawn(|| {
+                        let mux_s = mux_s.clone();
+                        let done_s = done_s.clone();
+                        mux(mux_s, r4, done_s);
+                    });
+
+                    scope.spawn(|| {
+                        let mux_s = mux_s.clone();
+                        done_r.recv();
+                        done_r.recv();
+                        done_r.recv();
+                        done_r.recv();
+
+                        // TODO: How can we drop this out of scope so our iteration stops below?
+                        drop(mux_s);
+                    });
+
+                    // Akin to recver in the go example.
+                    scope.spawn(|| {
+                        let mut seen = HashMap::new();
+
+                        for val in mux_r.0 {
+                            if seen.contains_key(&val) {
+                                panic!("got duplicate value for {}", val);
+                            }
+                            seen.insert(val, true);
+                        }
+                    });
+                });
+            }
         }
 
         // https://github.com/golang/go/blob/master/test/chan/fifo.go
@@ -84,7 +170,18 @@ macro_rules! tests {
 
         // https://github.com/golang/go/blob/master/test/chan/zerosize.go
         mod zerosize {
-            // TODO
+            use super::*;
+
+            #[test]
+            fn zero_size_struct() {
+                struct ZeroSize;
+                let _ = channel::unbounded::<ZeroSize>();
+            }
+
+            #[test]
+            fn zero_size_array() {
+                let _ = channel::unbounded::<[u8; 0]>();
+            }
         }
 
         // https://github.com/golang/go/blob/master/src/runtime/chan_test.go
