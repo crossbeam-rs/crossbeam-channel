@@ -27,7 +27,7 @@ macro_rules! tests {
         mod doubleselect {
             use super::*;
 
-            const ITERATIONS: usize = 100_000;
+            const ITERATIONS: i32 = 100_000;
 
             #[test]
             #[ignore]
@@ -39,12 +39,13 @@ macro_rules! tests {
                 let (done_s, done_r) = channel::unbounded();
                 let (mux_s, mux_r) = channel::unbounded();
 
-                fn mux(out: channel::Sender<usize>, in_c: channel::Receiver<usize>, done: channel::Sender<bool>) {
+                fn mux(out: channel::Sender<i32>, in_c: channel::Receiver<i32>, done: channel::Sender<bool>) {
                     for val in in_c.0 {
                         out.send(val);
                     }
 
                     done.send(true);
+                    drop(out);
                 }
 
                 crossbeam::scope(|scope| {
@@ -94,21 +95,18 @@ macro_rules! tests {
                         done_r.recv();
                         done_r.recv();
 
-                        // TODO: How can we drop this out of scope so our iteration stops below?
                         drop(mux_s);
                     });
 
                     // Akin to recver in the go example.
-                    scope.spawn(|| {
-                        let mut seen = HashMap::new();
+                    let mut seen = HashMap::new();
 
-                        for val in mux_r.0 {
-                            if seen.contains_key(&val) {
-                                panic!("got duplicate value for {}", val);
-                            }
-                            seen.insert(val, true);
+                    for val in mux_r.0 {
+                        if seen.contains_key(&val) {
+                            panic!("got duplicate value for {}", val);
                         }
-                    });
+                        seen.insert(val, true);
+                    }
                 });
             }
         }
