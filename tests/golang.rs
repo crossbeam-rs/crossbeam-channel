@@ -30,7 +30,6 @@ macro_rules! tests {
             const ITERATIONS: i32 = 100_000;
 
             #[test]
-            #[ignore]
             fn test_double_select() {
                 let (c1, r1) = channel::unbounded();
                 let (c2, r2) = channel::unbounded();
@@ -67,29 +66,28 @@ macro_rules! tests {
                     });
 
                     // This is akin to the mux function call.
-                    scope.spawn(|| {
+                    {
                         let mux_s = mux_s.clone();
                         let done_s = done_s.clone();
-                        mux(mux_s, r1, done_s);
-                    });
-                    scope.spawn(|| {
+                        scope.spawn(move || mux(mux_s, r1, done_s));
+                    }
+                    {
                         let mux_s = mux_s.clone();
                         let done_s = done_s.clone();
-                        mux(mux_s, r2, done_s);
-                    });
-                    scope.spawn(|| {
+                        scope.spawn(move || mux(mux_s, r2, done_s));
+                    }
+                    {
                         let mux_s = mux_s.clone();
                         let done_s = done_s.clone();
-                        mux(mux_s, r3, done_s);
-                    });
-                    scope.spawn(|| {
+                        scope.spawn(move || mux(mux_s, r3, done_s));
+                    }
+                    {
                         let mux_s = mux_s.clone();
                         let done_s = done_s.clone();
-                        mux(mux_s, r4, done_s);
-                    });
+                        scope.spawn(move || mux(mux_s, r4, done_s));
+                    }
 
                     scope.spawn(|| {
-                        let mux_s = mux_s.clone();
                         done_r.recv();
                         done_r.recv();
                         done_r.recv();
