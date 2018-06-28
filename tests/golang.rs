@@ -42,9 +42,9 @@ macro_rules! tests {
                     for val in in_c.0 {
                         out.send(val);
                     }
-
-                    done.send(true);
+                    
                     drop(out);
+                    done.send(true);
                 }
 
                 crossbeam::scope(|scope| {
