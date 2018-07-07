@@ -123,20 +123,16 @@ macro_rules! tests {
                     tx.send(i);
                 }
                 for i in 0..N {
-                    if let Some(val) = rx.recv() {
-                        if val != i {
-                            panic!("bad receive");
-                        }
+                    if rx.recv() != Some(i) {
+                        panic!("bad receive");
                     }
                 }
             }
 
             fn chain(ch: channel::Receiver<i32>, val: i32, in_c: channel::Receiver<i32>, out: channel::Sender<i32>) {
                 in_c.recv();
-                if let Some(v) = ch.recv() {
-                    if v != val {
-                        panic!(val);
-                    }
+                if ch.recv() != Some(val) {
+                    panic!(val);
                 }
                 out.send(1);
             }
