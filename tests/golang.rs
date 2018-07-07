@@ -140,13 +140,13 @@ macro_rules! tests {
             // SynchFifo from the go example.
             #[test]
             fn sync() {
-                let (ch_s, ch_r) = channel::unbounded();
-                let (in_s, mut in_r) = channel::unbounded();
+                let (ch_s, ch_r) = channel::bounded(0);
+                let (in_s, mut in_r) = channel::bounded(0);
                 let start = in_s.clone();
 
                 crossbeam::scope(|scope| {
                     for i in 0..N {
-                        let (out_s, out_r) = channel::unbounded();
+                        let (out_s, out_r) = channel::bounded(0);
                         let ch_r = ch_r.clone();
                         scope.spawn(move || {
                             chain(ch_r, i, in_r, out_s);
