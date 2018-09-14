@@ -165,9 +165,8 @@ impl<T> Channel<T> {
     /// Writes a message into the channel.
     pub fn write(&self, _token: &mut Token, msg: T) {
         let guard = epoch::pin();
-        let backoff = &mut Backoff::new();
 
-		// If it happen to retrieve stale value, we can get the right index along the `next` filed
+        // If it happen to retrieve stale value, we can get the right index along the `next` filed
         let mut tail_ptr = self.tail.block.load(Ordering::Acquire, &guard);
         let mut tail = unsafe { tail_ptr.deref() };
 
