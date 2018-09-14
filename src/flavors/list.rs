@@ -178,7 +178,6 @@ impl<T> Channel<T> {
 
         // loop just for link next block, not for compare_exchange_weak...
         loop {
-
             // Calculate the index of the corresponding distance from this block's start.
             let offset = tail_index.wrapping_sub(tail.start_index);
 
@@ -196,7 +195,6 @@ impl<T> Channel<T> {
                 }
                 break;
                 // Now, no longer need backoff.
-
             } else {
                 // we can help to add next block ( next.start_index = tail.start_index + BLOCK_CAP ) instead of spinning.
                 self.link_next_block(tail_ptr, tail, tail.start_index + BLOCK_CAP, &guard);
