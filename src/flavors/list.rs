@@ -151,15 +151,29 @@ impl<T> Channel<T> {
         let new = Owned::new(Block::new(index));
 
         // try to move the tail pointer forward
-        let _ = tail.next.compare_and_set(Shared::null(), new, Ordering::Release, guard)
-        .map(|shared| {
-            let _ = self.tail.block.compare_and_set(tail_ptr, shared, Ordering::Release, guard);
-        })
-        .map_err(|e| {
-            let _ = self.tail.block.compare_and_set(tail_ptr, e.current, Ordering::Release, guard);
-            // Actually, drop of e.new will be called automatically...
-            drop(e.new);
-        });
+        let next_block = tail.next.load(Ordering::Acquire, guard);
+        if next_block == Shared::null() {
+            let _ = tail.next.compare_and_set(Shared::null(), new, Ordering::Release, guard)
+            .map(|shared| {
+                if self.tail.block.load(Ordering::Acquire, guard) == tail_ptr {
+                    let _ = self.tail.block.compare_and_set(tail_ptr, shared, Ordering::Release, guard);
+                }
+            })
+            .map_err(|e| {
+                // No longer need backoff.step();
+                if self.tail.block.load(Ordering::Acquire, guard) == tail_ptr {
+                    let _ = self.tail.block.compare_and_set(tail_ptr, e.current, Ordering::Release, guard);
+                }
+                drop(e.new);
+                // Actually, drop of e.new will be called automatically...
+            });
+        } else {
+            // No longer need backoff.step();
+            if self.tail.block.load(Ordering::Acquire, guard) == tail_ptr {
+                let _ = self.tail.block.compare_and_set(tail_ptr, next_block, Ordering::Release, guard);
+            }
+            drop(new);
+        }
     }
 
     /// Writes a message into the channel.
