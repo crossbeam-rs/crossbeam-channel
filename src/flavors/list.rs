@@ -151,66 +151,71 @@ impl<T> Channel<T> {
         let new = Owned::new(Block::new(index));
 
         // try to move the tail pointer forward
-        let _ = tail.next.compare_and_set(Shared::null(), new, Ordering::Release, guard)
-        .map(|shared| {
-            let _ = self.tail.block.compare_and_set(tail_ptr, shared, Ordering::Release, guard);
-        })
-        .map_err(|e| {
-            let _ = self.tail.block.compare_and_set(tail_ptr, e.current, Ordering::Release, guard);
-            // Actually, drop of e.new will be called automatically...
-            drop(e.new);
-        });
+        let next_block = tail.next.load(Ordering::Acquire, guard);
+        if next_block == Shared::null() {
+            let _ = tail.next.compare_and_set(Shared::null(), new, Ordering::Release, guard)
+            .map(|shared| {
+                if self.tail.block.load(Ordering::Acquire, guard) == tail_ptr {
+                    let _ = self.tail.block.compare_and_set(tail_ptr, shared, Ordering::Release, guard);
+                }
+            })
+            .map_err(|e| {
+                // No longer need backoff.step();
+                if self.tail.block.load(Ordering::Acquire, guard) == tail_ptr {
+                    let _ = self.tail.block.compare_and_set(tail_ptr, e.current, Ordering::Release, guard);
+                }
+                drop(e.new);
+                // Actually, drop of e.new will be called automatically...
+            });
+        } else {
+            // No longer need backoff.step();
+            if self.tail.block.load(Ordering::Acquire, guard) == tail_ptr {
+                let _ = self.tail.block.compare_and_set(tail_ptr, next_block, Ordering::Release, guard);
+            }
+            drop(new);
+        }
     }
 
     /// Writes a message into the channel.
     pub fn write(&self, _token: &mut Token, msg: T) {
         let guard = epoch::pin();
-        let backoff = &mut Backoff::new();
 
+        // If it happen to retrieve stale value, we can get the right index along the `next` filed
+        let mut tail_ptr = self.tail.block.load(Ordering::Acquire, &guard);
+        let mut tail = unsafe { tail_ptr.deref() };
+
+        // The tail_index is wanted slot, this line must be executed after retrieve the tail.
+        // 171 line happens-before 178 line,
+        // Otherwise, the tail's start_index may exceed tail_index...
+        // and we can't reach right block, it was a disaster.
+        let tail_index = self.tail.index.fetch_add(1, Ordering::Relaxed);
+
+        // loop just for link next block, not for compare_exchange_weak...
         loop {
-            // These two load operations don't have to be `SeqCst`. If they happen to retrieve
-            // stale values, the following CAS will fail or won't even be attempted.
-            let tail_ptr = self.tail.block.load(Ordering::Acquire, &guard);
-            let tail = unsafe { tail_ptr.deref() };
-            let tail_index = self.tail.index.load(Ordering::Relaxed);
-
-            // Calculate the index of the corresponding slot in the block.
+            // Calculate the index of the corresponding distance from this block's start.
             let offset = tail_index.wrapping_sub(tail.start_index);
-
-            // Advance the current index one slot forward.
-            let new_index = tail_index.wrapping_add(1);
 
             // If `tail_index` is pointing into `tail`...
             if offset < BLOCK_CAP {
-                // Try moving the tail index forward.
-                if self
-                    .tail
-                    .index
-                    .compare_exchange_weak(
-                        tail_index,
-                        new_index,
-                        Ordering::SeqCst,
-                        Ordering::Relaxed,
-                    )
-                    .is_ok()
-                {
-                    // If this was the last slot in the block, allocate a new block.
-                    if offset + 1 == BLOCK_CAP {
-                        self.link_next_block(tail_ptr, tail, new_index, &guard);
-                    }
-
-                    unsafe {
-                        let slot = tail.slots.get_unchecked(offset).get();
-                        (*slot).msg.get().write(ManuallyDrop::new(msg));
-                        (*slot).ready.store(true, Ordering::Release);
-                    }
-                    break;
-                } else {
-                    backoff.step();
+                // If this was the last slot in the block, allocate a new block.
+                if offset + 1 == BLOCK_CAP {
+                    self.link_next_block(tail_ptr, tail, tail.start_index + BLOCK_CAP, &guard);
                 }
+
+                unsafe {
+                    let slot = tail.slots.get_unchecked(offset).get();
+                    (*slot).msg.get().write(ManuallyDrop::new(msg));
+                    (*slot).ready.store(true, Ordering::Release);
+                }
+                break;
+                // Now, no longer need backoff.
             } else {
-                // we can help the writer("offset + 1 == BLOCK_CAP") to add next block instead of spinning.
-                self.link_next_block(tail_ptr, tail, tail_index, &guard);
+                // we can help to add next block ( next.start_index = tail.start_index + BLOCK_CAP ) instead of spinning.
+                self.link_next_block(tail_ptr, tail, tail.start_index + BLOCK_CAP, &guard);
+
+                // Just along the `next` field to get the right block.
+                tail_ptr = tail.next.load(Ordering::Acquire, &guard);
+                tail = unsafe { tail_ptr.deref() };
             }
         }
 
